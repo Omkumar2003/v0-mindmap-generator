@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
+import { ThemeToggle } from './ThemeToggle'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
@@ -40,12 +41,18 @@ export function Header() {
           </span>
         </Link>
 
-        <nav className="flex items-center gap-4">
+        <nav className="flex items-center gap-2">
+          <ThemeToggle />
           {!isLoading && user ? (
             <>
               <Link href="/dashboard">
                 <Button variant="ghost" size="sm">
                   Dashboard
+                </Button>
+              </Link>
+              <Link href="/contact">
+                <Button variant="ghost" size="sm">
+                  Contact
                 </Button>
               </Link>
               <Button
@@ -59,6 +66,11 @@ export function Header() {
             </>
           ) : (
             <>
+              <Link href="/contact">
+                <Button variant="ghost" size="sm">
+                  Contact
+                </Button>
+              </Link>
               <Link href="/auth/login">
                 <Button variant="ghost" size="sm">
                   Sign In
