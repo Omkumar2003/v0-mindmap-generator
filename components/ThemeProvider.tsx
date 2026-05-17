@@ -3,11 +3,9 @@
 import { useEffect, useState } from 'react'
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [mounted, setMounted] = useState(false)
+  const [isMounted, setIsMounted] = useState(false)
 
   useEffect(() => {
-    setMounted(true)
-    
     // Check for saved theme preference or system preference
     const saved = localStorage.getItem('theme')
     const isDark =
@@ -19,9 +17,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     } else {
       document.documentElement.classList.remove('dark')
     }
+    
+    setIsMounted(true)
   }, [])
 
-  if (!mounted) return <>{children}</>
-
+  // Always render children to avoid hydration mismatch
   return <>{children}</>
 }

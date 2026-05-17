@@ -8,10 +8,10 @@ import { useRouter } from 'next/navigation'
 
 export default function Home() {
   const router = useRouter()
-  const [isLoading, setIsLoading] = useState(true)
-  const [user, setUser] = useState<any>(null)
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
+    setMounted(true)
     const checkAuth = async () => {
       const supabase = createClient()
       const {
@@ -20,22 +20,11 @@ export default function Home() {
 
       if (user) {
         router.push('/dashboard')
-      } else {
-        setUser(null)
-        setIsLoading(false)
       }
     }
 
     checkAuth()
   }, [router])
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="animate-pulse text-foreground">Loading...</div>
-      </div>
-    )
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted flex flex-col items-center justify-center px-4">
