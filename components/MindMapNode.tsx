@@ -3,19 +3,21 @@
 import { useState, useRef, useEffect } from 'react'
 import { Handle, Position } from 'reactflow'
 import { Button } from '@/components/ui/button'
-import { Trash2, Plus, Check, X, Image as ImageIcon } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { Trash2, Plus, Check, X, Image as ImageIcon, Maximize2 } from 'lucide-react'
 
 interface MindMapNodeProps {
   data: {
     label: string
-    image?: string
+    images?: string[] // Support multiple images
     onChangeLabel: (nodeId: string, label: string) => void
     onDelete: (nodeId: string) => void
     onAddChild: (parentNodeId: string) => void
     onImageUpload?: (nodeId: string, imageUrl: string) => void
+    onImageDelete?: (nodeId: string, imageIndex: number) => void
     isEditable: boolean
   }
+  id: string
+}
   id: string
 }
 
@@ -23,6 +25,7 @@ export default function MindMapNode({ data, id }: MindMapNodeProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editValue, setEditValue] = useState(data.label)
   const [textHeight, setTextHeight] = useState('auto')
+  const [fullImageIndex, setFullImageIndex] = useState<number | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -82,24 +85,66 @@ export default function MindMapNode({ data, id }: MindMapNodeProps) {
         <Handle type="target" position={Position.Top} />
 
         <div className="p-4 space-y-3">
-          {/* Image Display */}
-          {data.image && (
-            <div className="relative group">
-              <img
-                src={data.image}
-                alt="Node content"
-                className="w-full h-32 object-cover rounded-lg"
-              />
-              {data.isEditable && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={handleImageClick}
-                  className="absolute top-1 right-1 h-7 w-7 p-0 bg-black/50 hover:bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <ImageIcon className="w-4 h-4 text-white" />
-                </Button>
-              )}
+          {/* Image Display - Thumbnails */}
+          {data.images && data.images.length > 0 && (
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                {data.images.map((img, idx) => (
+                  <div key={idx} className="relative group rounded-lg overflow-hidden">
+                    <img
+                      src={img}
+                      alt={`Node image ${idx + 1}`}
+                      className="w-full h-20 object-cover cursor-pointer hover:opacity-80 transition-opacity"
+                      onClick={() => setFullImageIndex(idx)}
+                    />
+                    {data.isEditable && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          data.onImageDelete?.(id, idx)
+                        }}
+                        className="absolute top-0 right-0 h-5 w-5 p-0 bg-red-600/80 hover:bg-red-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Delete image"
+                      >
+                        <X className="w-3 h-3 text-white" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Full Image Modal */}
+          {fullImageIndex !== null && data.images && (
+            <div
+              className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
+              onClick={() => setFullImageIndex(null)}
+            >
+              <div
+                className="bg-card rounded-lg overflow-hidden max-w-2xl max-h-[80vh]"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <img
+                  src={data.images[fullImageIndex]}
+                  alt="Full view"
+                  className="w-full h-full object-contain"
+                />
+                <div className="flex justify-between items-center p-3 border-t border-border">
+                  <span className="text-sm text-muted-foreground">
+                    {fullImageIndex + 1} of {data.images.length}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setFullImageIndex(null)}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
             </div>
           )}
 

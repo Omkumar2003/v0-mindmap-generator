@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, Loader, RefreshCw } from 'lucide-react'
 import dynamic from 'next/dynamic'
+import YAMLEditor from '@/components/YAMLEditor'
 import type { Node, Edge } from 'reactflow'
 
 const MindMapEditor = dynamic(() => import('@/components/MindMapEditor'), {
@@ -37,6 +38,7 @@ export default function MindMapPage() {
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [yamlEditorOpen, setYamlEditorOpen] = useState(false)
   const supabase = createClient()
 
   useEffect(() => {
@@ -137,6 +139,11 @@ export default function MindMapPage() {
     } finally {
       setGenerating(false)
     }
+  }
+
+  const handleYAMLChange = (newNodes: Node[], newEdges: Edge[]) => {
+    setNodes(newNodes)
+    setEdges(newEdges)
   }
 
   const handleSaveMindMap = async () => {
@@ -247,31 +254,55 @@ export default function MindMapPage() {
         </div>
       </nav>
 
-      <main className="flex-1 relative w-full">
-        {nodes.length > 0 ? (
-          <MindMapEditor
-            initialNodes={nodes}
-            initialEdges={edges}
-            onNodesChange={setNodes}
-            onEdgesChange={setEdges}
-            isEditable={true}
-          />
-        ) : (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center">
-              <p className="text-muted-foreground mb-4">No mind map yet</p>
-              <Button
-                onClick={handleGenerateMindMap}
-                disabled={generating}
-                className="bg-primary hover:bg-primary/90 gap-2"
-              >
-                <RefreshCw className={`w-4 h-4 ${generating ? 'animate-spin' : ''}`} />
-                {generating ? 'Generating...' : 'Generate Mind Map'}
-              </Button>
+      <main className="flex-1 relative w-full flex">
+        <div className="flex-1 relative">
+          {nodes.length > 0 ? (
+            <MindMapEditor
+              initialNodes={nodes}
+              initialEdges={edges}
+              onNodesChange={setNodes}
+              onEdgesChange={setEdges}
+              isEditable={true}
+            />
+          ) : (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <p className="text-muted-foreground mb-4">No mind map yet</p>
+                <Button
+                  onClick={handleGenerateMindMap}
+                  disabled={generating}
+                  className="bg-primary hover:bg-primary/90 gap-2"
+                >
+                  <RefreshCw className={`w-4 h-4 ${generating ? 'animate-spin' : ''}`} />
+                  {generating ? 'Generating...' : 'Generate Mind Map'}
+                </Button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
+
+        <div className={`transition-all duration-300 ${yamlEditorOpen ? 'w-80' : 'w-0'} overflow-hidden flex flex-col`}>
+          {nodes.length > 0 && (
+            <YAMLEditor
+              nodes={nodes}
+              edges={edges}
+              onYAMLChange={handleYAMLChange}
+              isOpen={yamlEditorOpen}
+              onToggle={() => setYamlEditorOpen(!yamlEditorOpen)}
+            />
+          )}
+        </div>
       </main>
+
+      {nodes.length > 0 && !yamlEditorOpen && (
+        <button
+          onClick={() => setYamlEditorOpen(true)}
+          className="fixed bottom-6 right-6 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg shadow-lg transition-all"
+          title="Open YAML Editor"
+        >
+          YAML
+        </button>
+      )}
     </div>
   )
 }

@@ -19,35 +19,53 @@ const nodeTypes = {
   mindmap: MindMapNode,
 }
 
-// Pure function for calculating layout
+// Pure function for calculating top-down hierarchical layout
 const calculateLayoutPositions = (nodesToLayout: Node[], edgesToLayout: Edge[]) => {
   const positions = new Map<string, { x: number; y: number }>()
   const visited = new Set<string>()
-  const horizontalSpacing = 350
-  const verticalSpacing = 200
+  const verticalSpacing = 120 // Space between levels
+  const horizontalSpacing = 280 // Space between siblings
 
-  function layoutBranch(nodeId: string, x: number, y: number) {
-    if (visited.has(nodeId)) return
+  // Build parent-child relationships
+  const childrenMap = new Map<string, string[]>()
+  edgesToLayout.forEach(edge => {
+    if (!childrenMap.has(edge.source)) {
+      childrenMap.set(edge.source, [])
+    }
+    childrenMap.get(edge.source)?.push(edge.target)
+  })
+
+  // Calculate tree width for proper centering
+  function getTreeWidth(nodeId: string): number {
+    const children = childrenMap.get(nodeId) || []
+    if (children.length === 0) return horizontalSpacing
+    return children.reduce((sum, child) => sum + getTreeWidth(child), 0) + (children.length - 1) * 0
+  }
+
+  // Recursive layout function for top-down approach
+  function layoutNode(nodeId: string, x: number, y: number, siblingIndex: number = 0): number {
+    if (visited.has(nodeId)) return x
     visited.add(nodeId)
     positions.set(nodeId, { x, y })
 
-    const childEdges = edgesToLayout.filter(e => e.source === nodeId)
-    if (childEdges.length === 0) return
+    const children = childrenMap.get(nodeId) || []
+    if (children.length === 0) return x
 
-    const childCount = childEdges.length
-    const totalHeight = childCount * verticalSpacing
-    const startY = y - totalHeight / 2
+    const totalChildWidth = children.reduce((sum) => sum + horizontalSpacing, 0)
+    const startX = x - totalChildWidth / 2 + horizontalSpacing / 2
 
-    childEdges.forEach((edge, index) => {
-      const childY = startY + index * verticalSpacing
-      const childX = x + horizontalSpacing
-      layoutBranch(edge.target, childX, childY)
+    let currentX = startX
+    children.forEach((childId) => {
+      layoutNode(childId, currentX, y + verticalSpacing, 0)
+      currentX += horizontalSpacing
     })
+
+    return x
   }
 
   const rootNode = nodesToLayout.find(n => n.id === 'root') || nodesToLayout[0]
   if (rootNode) {
-    layoutBranch(rootNode.id, 0, 0)
+    layoutNode(rootNode.id, 0, 0)
   }
 
   return nodesToLayout.map(node =>
@@ -128,9 +146,12 @@ export default function MindMapEditor({
         type: 'mindmap',
         data: {
           label: 'New Concept',
+          images: [],
           onChangeLabel: handleNodeChange,
           onDelete: handleDeleteNode,
           onAddChild: handleAddChild,
+          onImageUpload: handleImageUpload,
+          onImageDelete: handleImageDelete,
           isEditable,
         },
         position: { x: 0, y: 0 },
@@ -155,6 +176,34 @@ export default function MindMapEditor({
     })
   }, [handleNodeChange, handleDeleteNode, isEditable, edges, setEdges, onNodesChange, onEdgesChange])
 
+  const handleImageUpload = useCallback((nodeId: string, imageUrl: string) => {
+    setNodes(n => n.map(node =>
+      node.id === nodeId
+        ? {
+            ...node,
+            data: {
+              ...node.data,
+              images: [...(node.data.images || []), imageUrl],
+            },
+          }
+        : node
+    ))
+  }, [setNodes])
+
+  const handleImageDelete = useCallback((nodeId: string, imageIndex: number) => {
+    setNodes(n => n.map(node =>
+      node.id === nodeId
+        ? {
+            ...node,
+            data: {
+              ...node.data,
+              images: (node.data.images || []).filter((_, i) => i !== imageIndex),
+            },
+          }
+        : node
+    ))
+  }, [setNodes])
+
   const mappedNodes = useMemo(
     () =>
       nodes.map(node => ({
@@ -164,10 +213,12 @@ export default function MindMapEditor({
           onChangeLabel: handleNodeChange,
           onDelete: handleDeleteNode,
           onAddChild: handleAddChild,
+          onImageUpload: handleImageUpload,
+          onImageDelete: handleImageDelete,
           isEditable,
         },
       })),
-    [nodes, handleNodeChange, handleDeleteNode, handleAddChild, isEditable]
+    [nodes, handleNodeChange, handleDeleteNode, handleAddChild, handleImageUpload, handleImageDelete, isEditable]
   )
 
   return (
