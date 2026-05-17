@@ -105,26 +105,38 @@ Make sure every node object has "label" and optionally "children" array. Be conc
     }
 
     // Convert tree structure to React Flow nodes and edges
-    const nodes: MindMapNode[] = []
-    const edges: Array<{ source: string; target: string }> = []
+    const nodes: any[] = []
+    const edges: Array<{ source: string; target: string; id?: string }> = []
     let nodeId = 0
 
     function processNode(
       node: any,
       parentId: string | null,
-      level: number
+      level: number,
+      childIndex: number = 0
     ): string {
       const currentId = `node-${nodeId++}`
-      const xSpacing = 250
-      const ySpacing = 150
-      const nodesAtLevel = 1 // Simplified for now
+      const xSpacing = 280
+      const ySpacing = 120
+      
+      // Calculate position for hierarchical layout
+      const branchWidth = 800
+      const totalBranches = node.children?.length || 1
+      const childrenCount = countNodes(node)
 
       nodes.push({
         id: currentId,
-        data: { label: node.label || 'Untitled' },
+        type: 'mindmap',
+        data: {
+          label: node.label || 'Untitled',
+          isEditable: true,
+          onChangeLabel: () => {},
+          onDelete: () => {},
+          onAddChild: () => {},
+        },
         position: {
           x: level * xSpacing,
-          y: parentId ? level * ySpacing : 0,
+          y: parentId ? (childIndex - (totalBranches - 1) / 2) * ySpacing : 0,
         },
       })
 
@@ -132,16 +144,27 @@ Make sure every node object has "label" and optionally "children" array. Be conc
         edges.push({
           source: parentId,
           target: currentId,
+          id: `edge-${parentId}-${currentId}`,
         })
       }
 
       if (node.children && Array.isArray(node.children)) {
-        for (const child of node.children) {
-          processNode(child, currentId, level + 1)
+        for (let i = 0; i < node.children.length; i++) {
+          processNode(node.children[i], currentId, level + 1, i)
         }
       }
 
       return currentId
+    }
+
+    function countNodes(node: any): number {
+      let count = 1
+      if (node.children && Array.isArray(node.children)) {
+        for (const child of node.children) {
+          count += countNodes(child)
+        }
+      }
+      return count
     }
 
     processNode(mindmapStructure, null, 0)
@@ -190,7 +213,8 @@ Return ONLY valid JSON (no markdown):
         user_id: user.id,
         document_id: documentId,
         title: documentTitle,
-        root_node: { nodes, edges },
+        root_node: nodes,
+        edges: edges,
       })
       .select()
       .single()

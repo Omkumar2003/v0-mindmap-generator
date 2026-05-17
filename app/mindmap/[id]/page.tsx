@@ -113,26 +113,37 @@ export default function MindMapPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           documentId: docId,
-          title: document.title,
-          content: document.content,
+          documentTitle: document.title,
+          documentContent: document.content,
         }),
       })
 
-      if (!response.ok) throw new Error('Failed to generate mind map')
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to generate mind map')
+      }
 
       const data = await response.json()
+      console.log('[v0] Generated mindmap:', data)
       setNodes(data.nodes)
       setEdges(data.edges)
+      if (data.mindmapId) {
+        setMindmap({ id: data.mindmapId, title: document.title, root_node: data.nodes, edges: data.edges })
+      }
+      alert('Mind map generated successfully!')
     } catch (error) {
-      console.error('Error generating mind map:', error)
-      alert('Failed to generate mind map')
+      console.error('[v0] Error generating mind map:', error)
+      alert(`Failed to generate mind map: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setGenerating(false)
     }
   }
 
   const handleSaveMindMap = async () => {
-    if (!document) return
+    if (!document || nodes.length === 0) {
+      alert('No mind map to save. Generate one first!')
+      return
+    }
 
     try {
       setSaving(true)
@@ -153,8 +164,10 @@ export default function MindMapPage() {
             updated_at: new Date().toISOString(),
           })
           .eq('id', mindmap.id)
+          .eq('user_id', user.id)
 
         if (error) throw error
+        console.log('[v0] Mind map updated successfully')
       } else {
         // Create new mindmap
         const { data, error } = await supabase
@@ -169,14 +182,18 @@ export default function MindMapPage() {
           .select()
           .single()
 
-        if (error) throw error
+        if (error) {
+          console.error('[v0] Error inserting mindmap:', error)
+          throw error
+        }
         setMindmap(data)
+        console.log('[v0] Mind map created successfully:', data)
       }
 
-      alert('Mind map saved successfully')
+      alert('Mind map saved successfully!')
     } catch (error) {
-      console.error('Error saving mind map:', error)
-      alert('Failed to save mind map')
+      console.error('[v0] Error saving mind map:', error)
+      alert(`Failed to save mind map: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setSaving(false)
     }
