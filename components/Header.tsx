@@ -6,6 +6,7 @@ import { ThemeToggle } from './ThemeToggle'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import { Settings } from 'lucide-react'
 
 export function Header() {
   const router = useRouter()
@@ -62,6 +63,12 @@ export function Header() {
                   <Link href="/contact">
                     <Button variant="ghost" size="sm">
                       Contact
+                    </Button>
+                  </Link>
+                  <Link href="/profile">
+                    <Button variant="ghost" size="sm" className="gap-1">
+                      <Settings className="w-4 h-4" />
+                      <span className="hidden sm:inline">Profile</span>
                     </Button>
                   </Link>
                   <Button

@@ -76,17 +76,67 @@ export default function MindMapEditor({
 
   const handleDeleteNode = useCallback(
     (nodeId: string) => {
+      if (nodeId === 'root') return // Prevent deleting root node
+
       const updatedNodes = nodes.filter(node => node.id !== nodeId)
       const updatedEdges = edges.filter(
         edge => edge.source !== nodeId && edge.target !== nodeId
       )
-      setNodes(updatedNodes)
+
+      // Apply auto-layout after deletion
+      const layoutedNodes = calculateLayout(updatedNodes, updatedEdges)
+      setNodes(layoutedNodes)
       setEdges(updatedEdges)
-      onNodesChange?.(updatedNodes)
+      onNodesChange?.(layoutedNodes)
       onEdgesChange?.(updatedEdges)
     },
-    [nodes, edges, setNodes, setEdges, onNodesChange, onEdgesChange]
+    [nodes, edges, setNodes, setEdges, onNodesChange, onEdgesChange, calculateLayout]
   )
+
+  // Calculate hierarchical layout for nodes
+  const calculateLayout = useCallback((nodesToLayout: Node[], edgesToLayout: Edge[]) => {
+    const positions = new Map<string, { x: number; y: number }>()
+    const visited = new Set<string>()
+    const nodeWidths = 280
+    const nodeHeights = 150
+    const horizontalSpacing = 350
+    const verticalSpacing = 200
+
+    function layoutBranch(nodeId: string, x: number, y: number, depth: number) {
+      if (visited.has(nodeId)) return
+      visited.add(nodeId)
+
+      positions.set(nodeId, { x, y })
+
+      // Find children of this node
+      const childEdges = edgesToLayout.filter(e => e.source === nodeId)
+      if (childEdges.length === 0) return
+
+      // Distribute children vertically
+      const childCount = childEdges.length
+      const totalHeight = childCount * verticalSpacing
+      const startY = y - totalHeight / 2
+
+      childEdges.forEach((edge, index) => {
+        const childY = startY + index * verticalSpacing
+        const childX = x + horizontalSpacing
+        layoutBranch(edge.target, childX, childY, depth + 1)
+      })
+    }
+
+    // Start layout from root node
+    const rootNode = nodesToLayout.find(n => n.id === 'root') || nodesToLayout[0]
+    if (rootNode) {
+      layoutBranch(rootNode.id, 0, 0, 0)
+    }
+
+    // Apply calculated positions
+    return nodesToLayout.map(node =>
+      positions.has(node.id)
+        ? { ...node, position: positions.get(node.id)! }
+        : node
+    )
+  }, [])
 
   const handleAddChild = useCallback(
     (parentNodeId: string) => {
@@ -105,7 +155,7 @@ export default function MindMapEditor({
           isEditable,
         },
         position: {
-          x: parentNode.position.x + 200,
+          x: parentNode.position.x + 300,
           y: parentNode.position.y + 100,
         },
       }
@@ -118,12 +168,15 @@ export default function MindMapEditor({
 
       const updatedNodes = [...nodes, newNode]
       const updatedEdges = [...edges, newEdge]
-      setNodes(updatedNodes)
+
+      // Apply auto-layout
+      const layoutedNodes = calculateLayout(updatedNodes, updatedEdges)
+      setNodes(layoutedNodes)
       setEdges(updatedEdges)
-      onNodesChange?.(updatedNodes)
+      onNodesChange?.(layoutedNodes)
       onEdgesChange?.(updatedEdges)
     },
-    [nodes, edges, setNodes, setEdges, handleNodeChange, handleDeleteNode, isEditable, onNodesChange, onEdgesChange]
+    [nodes, edges, setNodes, setEdges, handleNodeChange, handleDeleteNode, isEditable, onNodesChange, onEdgesChange, calculateLayout]
   )
 
   // Memoize mapped nodes to avoid recreation on every render
