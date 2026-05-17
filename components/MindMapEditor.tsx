@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useMemo } from 'react'
 import ReactFlow, {
   Node,
   Edge,
@@ -15,6 +15,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css'
 import MindMapNode from './MindMapNode'
 
+// Move nodeTypes outside component to avoid recreation warning
 const nodeTypes = {
   mindmap: MindMapNode,
 }
@@ -125,19 +126,26 @@ export default function MindMapEditor({
     [nodes, edges, setNodes, setEdges, handleNodeChange, handleDeleteNode, isEditable, onNodesChange, onEdgesChange]
   )
 
+  // Memoize mapped nodes to avoid recreation on every render
+  const mappedNodes = useMemo(
+    () =>
+      nodes.map(node => ({
+        ...node,
+        data: {
+          ...node.data,
+          onChangeLabel: handleNodeChange,
+          onDelete: handleDeleteNode,
+          onAddChild: handleAddChild,
+          isEditable,
+        },
+      })),
+    [nodes, handleNodeChange, handleDeleteNode, handleAddChild, isEditable]
+  )
+
   return (
-    <div className="w-full h-full">
+    <div className="w-full h-screen bg-background">
       <ReactFlow
-        nodes={nodes.map(node => ({
-          ...node,
-          data: {
-            ...node.data,
-            onChangeLabel: handleNodeChange,
-            onDelete: handleDeleteNode,
-            onAddChild: handleAddChild,
-            isEditable,
-          },
-        }))}
+        nodes={mappedNodes}
         edges={edges}
         onConnect={onConnect}
         onNodesChange={handleNodesChange}

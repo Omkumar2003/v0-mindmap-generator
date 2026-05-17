@@ -75,7 +75,7 @@ Return ONLY a valid JSON object (no markdown, no code blocks) with this structur
 
 Make sure every node object has "label" and optionally "children" array. Be concise and clear.`
 
-    const message = await groq.messages.create({
+    const message = await groq.chat.completions.create({
       model: 'mixtral-8x7b-32768',
       max_tokens: 2000,
       messages: [
@@ -180,7 +180,7 @@ Return ONLY valid JSON (no markdown):
   "keyPoints": ["point1", "point2", "point3", "point4", "point5"]
 }`
 
-    const summaryMessage = await groq.messages.create({
+    const summaryMessage = await groq.chat.completions.create({
       model: 'mixtral-8x7b-32768',
       max_tokens: 500,
       messages: [
