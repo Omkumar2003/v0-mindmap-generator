@@ -125,7 +125,7 @@ export default function MindMapEditor({
       const updatedNodes = prevNodes.map(node =>
         node.id === nodeId ? { ...node, data: { ...node.data, label } } : node
       )
-      console.log('[v0] Node label changed:', nodeId, label)
+      // Notify parent of changes for YAML sync
       onNodesChange?.(updatedNodes)
       return updatedNodes
     })

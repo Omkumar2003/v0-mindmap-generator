@@ -134,13 +134,20 @@ const yamlToNodes = (yamlText: string): { nodes: Node[], edges: Edge[] } => {
 export default function YAMLEditor({ nodes, edges, onYAMLChange, isOpen, onToggle }: YAMLEditorProps) {
   const [yaml, setYAML] = useState(nodesToYAML(nodes, edges))
   const [copied, setCopied] = useState(false)
+  const [isUserEditing, setIsUserEditing] = useState(false)
 
-  // Update YAML whenever nodes or their data changes (including labels)
+  // Only update YAML from mindmap changes when user is not actively editing YAML
+  // Also use debounce to prevent rapid updates
   useEffect(() => {
-    const newYAML = nodesToYAML(nodes, edges)
-    console.log('[v0] YAML regenerated due to node changes:', newYAML.substring(0, 100))
-    setYAML(newYAML)
-  }, [JSON.stringify(nodes), JSON.stringify(edges)])
+    if (isUserEditing) return // Don't overwrite while user is typing
+    
+    const timer = setTimeout(() => {
+      const newYAML = nodesToYAML(nodes, edges)
+      setYAML(newYAML)
+    }, 500) // Debounce for 500ms
+    
+    return () => clearTimeout(timer)
+  }, [nodes, edges, isUserEditing])
 
   const handleYAMLChange = (newYAML: string) => {
     setYAML(newYAML)
@@ -203,9 +210,15 @@ export default function YAMLEditor({ nodes, edges, onYAMLChange, isOpen, onToggl
 
           <textarea
             value={yaml}
-            onChange={(e) => handleYAMLChange(e.target.value)}
-            className="flex-1 p-3 font-mono text-xs bg-background text-foreground border-0 resize-none focus:outline-none overflow-auto"
-            placeholder="- Root Node&#10;  - Child 1&#10;  - Child 2&#10;    - Grandchild"
+            onChange={(e) => {
+              setIsUserEditing(true)
+              handleYAMLChange(e.target.value)
+            }}
+            onBlur={() => setIsUserEditing(false)}
+            className="flex-1 p-3 font-mono text-xs bg-background text-foreground border-0 resize-none focus:outline-none"
+            placeholder="- Root Node
+  - Child 1
+  - Child 2"
           />
 
           <div className="p-3 text-xs text-muted-foreground border-t border-border bg-muted/20">
