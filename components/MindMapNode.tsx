@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Handle, Position } from 'reactflow'
 import { Button } from '@/components/ui/button'
 import { Trash2, Plus, Check, X, Image as ImageIcon, Maximize2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 interface MindMapNodeProps {
   data: {
