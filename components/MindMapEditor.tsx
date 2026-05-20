@@ -121,10 +121,15 @@ export default function MindMapEditor({
 
   // Create stable callback references that don't cause circular dependencies
   const handleNodeChange = useCallback((nodeId: string, label: string) => {
-    setNodes(n => n.map(node =>
-      node.id === nodeId ? { ...node, data: { ...node.data, label } } : node
-    ))
-  }, [setNodes])
+    setNodes(prevNodes => {
+      const updatedNodes = prevNodes.map(node =>
+        node.id === nodeId ? { ...node, data: { ...node.data, label } } : node
+      )
+      console.log('[v0] Node label changed:', nodeId, label)
+      onNodesChange?.(updatedNodes)
+      return updatedNodes
+    })
+  }, [setNodes, onNodesChange])
 
   const handleDeleteNode = useCallback((nodeId: string) => {
     if (nodeId === 'root') return

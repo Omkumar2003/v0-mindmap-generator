@@ -135,11 +135,12 @@ export default function YAMLEditor({ nodes, edges, onYAMLChange, isOpen, onToggl
   const [yaml, setYAML] = useState(nodesToYAML(nodes, edges))
   const [copied, setCopied] = useState(false)
 
+  // Update YAML whenever nodes or their data changes (including labels)
   useEffect(() => {
-    const newYaml = nodesToYAML(nodes, edges)
-    console.log('[v0] Updating YAML from nodes:', newYaml)
-    setYAML(newYaml)
-  }, [nodes, edges])
+    const newYAML = nodesToYAML(nodes, edges)
+    console.log('[v0] YAML regenerated due to node changes:', newYAML.substring(0, 100))
+    setYAML(newYAML)
+  }, [JSON.stringify(nodes), JSON.stringify(edges)])
 
   const handleYAMLChange = (newYAML: string) => {
     setYAML(newYAML)
