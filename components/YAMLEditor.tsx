@@ -18,101 +18,77 @@ const nodesToYAML = (nodes: Node[], edges: Edge[]): string => {
   if (nodes.length === 0) return ''
 
   // Build edge map for quick parent-child lookup
-  const edgeMap = new Map<string, string[]>()
+  const childrenMap = new Map<string, string[]>()
   edges.forEach(edge => {
-    if (!edgeMap.has(edge.source)) {
-      edgeMap.set(edge.source, [])
+    if (!childrenMap.has(edge.source)) {
+      childrenMap.set(edge.source, [])
     }
-    edgeMap.get(edge.source)?.push(edge.target)
+    childrenMap.get(edge.source)?.push(edge.target)
   })
 
   // Build node map for quick lookup
   const nodeMap = new Map<string, Node>()
   nodes.forEach(node => nodeMap.set(node.id, node))
 
-  // Find root node (prioritize 'root' id, otherwise use first node with no parent)
+  // Find root node
   let rootNode = nodes.find(n => n.id === 'root')
   if (!rootNode) {
-    const parentIds = new Set(edges.map(e => e.source))
-    rootNode = nodes.find(n => !parentIds.has(n.id)) || nodes[0]
+    const childIds = new Set(edges.map(e => e.target))
+    rootNode = nodes.find(n => !childIds.has(n.id)) || nodes[0]
   }
 
   if (!rootNode) return ''
 
   // Recursively build YAML
-  const buildYAML = (nodeId: string, indent: number = 0): string => {
+  const buildYAML = (nodeId: string, indent: number = 0): string[] => {
     const node = nodeMap.get(nodeId)
-    if (!node) return ''
+    if (!node) return []
 
+    const lines: string[] = []
     const indentStr = '  '.repeat(indent)
-    let yaml = `${indentStr}- ${node.data.label}`
+    
+    lines.push(`${indentStr}- ${node.data.label}`)
 
-    // Add images if present
-    if (node.data.images && node.data.images.length > 0) {
-      yaml += `\n${indentStr}  images:`
-      node.data.images.forEach((img, idx) => {
-        const preview = img.substring(0, 30) + (img.length > 30 ? '...' : '')
-        yaml += `\n${indentStr}    - image_${idx + 1}: ${preview}`
-      })
-    }
+    // Add children
+    const children = childrenMap.get(nodeId) || []
+    children.forEach(childId => {
+      const childLines = buildYAML(childId, indent + 1)
+      lines.push(...childLines)
+    })
 
-    // Add children recursively
-    const children = edgeMap.get(nodeId) || []
-    if (children.length > 0) {
-      children.forEach(childId => {
-        const childYaml = buildYAML(childId, indent + 1)
-        yaml += '\n' + childYaml
-      })
-    }
-
-    return yaml
+    return lines
   }
 
-  return buildYAML(rootNode.id)
+  return buildYAML(rootNode.id).join('\n')
 }
 
 // Parse YAML format back to mindmap nodes and edges
-const yamlToNodes = (yaml: string, existingNodes: Node[], existingEdges: Edge[]): { nodes: Node[], edges: Edge[] } => {
-  const allLines = yaml.split('\n')
+const yamlToNodes = (yamlText: string): { nodes: Node[], edges: Edge[] } => {
+  console.log('[v0] Parsing YAML:', yamlText)
+  
+  const lines = yamlText.split('\n')
   const nodes: Node[] = []
   const edges: Edge[] = []
+  const nodeStack: Array<{ id: string; level: number }> = [] // Track hierarchy
   let nodeCounter = 0
-  const parentStack: Array<{ nodeId: string; indent: number }> = []
 
-  // Helper to get node handlers from existing nodes
-  const getNodeHandlers = () => ({
-    onChangeLabel: () => {},
-    onDelete: () => {},
-    onAddChild: () => {},
-  })
-
-  // Process each line
-  for (let i = 0; i < allLines.length; i++) {
-    const line = allLines[i]
-    const trimmed = line.trim()
-
-    // Skip empty lines, images, and children keywords
-    if (!trimmed || trimmed === 'images:' || trimmed === 'children:' || trimmed.startsWith('- ') === false) {
-      continue
-    }
-
-    const indent = line.search(/\S/)
+  for (const line of lines) {
+    if (!line.trim()) continue // Skip empty lines
     
-    // Extract label from line
-    const match = trimmed.match(/^-\s+(.+)$/)
+    // Get indentation level (count leading spaces, divide by 2)
+    const leadingSpaces = line.match(/^(\s*)/)?.[1].length || 0
+    const level = Math.floor(leadingSpaces / 2)
+    
+    // Extract text after "- "
+    const match = line.match(/^\s*-\s+(.+)$/)
     if (!match) continue
-
-    let label = match[1].trim()
     
-    // Remove image references from label
-    if (label.includes('images:')) {
-      label = label.split('images:')[0].trim()
-    }
+    const label = match[1].trim()
+    const nodeId = `node-yaml-${Date.now()}-${nodeCounter++}`
 
-    // Generate node ID
-    const nodeId = `node-${Date.now()}-${nodeCounter++}`
+    console.log(`[v0] Parsed node: "${label}" at level ${level}`)
 
-    // Create new node
+    // Create node with all required properties
     const newNode: Node = {
       id: nodeId,
       type: 'mindmap',
@@ -120,29 +96,38 @@ const yamlToNodes = (yaml: string, existingNodes: Node[], existingEdges: Edge[])
         label,
         images: [],
         isEditable: true,
-        ...getNodeHandlers(),
+        onChangeLabel: () => {},
+        onDelete: () => {},
+        onAddChild: () => {},
+        onImageUpload: () => {},
+        onImageDelete: () => {},
       },
       position: { x: 0, y: 0 },
     }
 
-    // Find parent based on indentation
-    while (parentStack.length > 0 && parentStack[parentStack.length - 1].indent >= indent) {
-      parentStack.pop()
+    nodes.push(newNode)
+
+    // Pop stack until we find parent at previous level
+    while (nodeStack.length > 0 && nodeStack[nodeStack.length - 1].level >= level) {
+      nodeStack.pop()
     }
 
-    if (parentStack.length > 0) {
-      const parentId = parentStack[parentStack.length - 1].nodeId
+    // Create edge to parent if exists
+    if (nodeStack.length > 0) {
+      const parentId = nodeStack[nodeStack.length - 1].id
       edges.push({
         id: `edge-${parentId}-${nodeId}`,
         source: parentId,
         target: nodeId,
       })
+      console.log(`[v0] Created edge: ${parentId} -> ${nodeId}`)
     }
 
-    nodes.push(newNode)
-    parentStack.push({ nodeId, indent })
+    // Add current node to stack
+    nodeStack.push({ id: nodeId, level })
   }
 
+  console.log(`[v0] Final result: ${nodes.length} nodes, ${edges.length} edges`)
   return { nodes, edges }
 }
 
@@ -151,7 +136,9 @@ export default function YAMLEditor({ nodes, edges, onYAMLChange, isOpen, onToggl
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
-    setYAML(nodesToYAML(nodes, edges))
+    const newYaml = nodesToYAML(nodes, edges)
+    console.log('[v0] Updating YAML from nodes:', newYaml)
+    setYAML(newYaml)
   }, [nodes, edges])
 
   const handleYAMLChange = (newYAML: string) => {
@@ -160,17 +147,19 @@ export default function YAMLEditor({ nodes, edges, onYAMLChange, isOpen, onToggl
 
   const applyYAMLChanges = () => {
     try {
-      const { nodes: newNodes, edges: newEdges } = yamlToNodes(yaml, nodes, edges)
+      console.log('[v0] Applying YAML changes with text:', yaml)
+      const { nodes: newNodes, edges: newEdges } = yamlToNodes(yaml)
+      
       if (newNodes.length > 0) {
-        console.log('[v0] Applying YAML changes - new nodes:', newNodes.length, 'new edges:', newEdges.length)
+        console.log('[v0] Successfully parsed YAML into', newNodes.length, 'nodes and', newEdges.length, 'edges')
         onYAMLChange(newNodes, newEdges)
-        alert('Mind map updated from YAML!')
+        alert(`Mind map updated! Created ${newNodes.length} nodes.`)
       } else {
-        alert('No valid nodes found in YAML. Check the format.')
+        alert('No valid nodes found in YAML. Each line should start with "- NodeName"')
       }
     } catch (error) {
       console.error('[v0] Error parsing YAML:', error)
-      alert(`Error parsing YAML: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      alert(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
@@ -181,7 +170,7 @@ export default function YAMLEditor({ nodes, edges, onYAMLChange, isOpen, onToggl
   }
 
   return (
-    <div className="border-l border-border bg-card">
+    <div className="border-l border-border bg-card flex flex-col h-full">
       <button
         onClick={onToggle}
         className="w-full px-4 py-3 flex items-center gap-2 hover:bg-primary/5 transition-colors border-b border-border"
@@ -191,7 +180,7 @@ export default function YAMLEditor({ nodes, edges, onYAMLChange, isOpen, onToggl
       </button>
 
       {isOpen && (
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col flex-1 overflow-hidden">
           <div className="flex gap-2 p-3 border-b border-border bg-muted/30">
             <Button
               size="sm"
@@ -214,19 +203,17 @@ export default function YAMLEditor({ nodes, edges, onYAMLChange, isOpen, onToggl
           <textarea
             value={yaml}
             onChange={(e) => handleYAMLChange(e.target.value)}
-            className="flex-1 p-3 font-mono text-xs bg-background text-foreground border-0 resize-none focus:outline-none"
-            placeholder="- Root Node
-  children:
-    - Child 1
-    - Child 2"
+            className="flex-1 p-3 font-mono text-xs bg-background text-foreground border-0 resize-none focus:outline-none overflow-auto"
+            placeholder="- Root Node&#10;  - Child 1&#10;  - Child 2&#10;    - Grandchild"
           />
 
           <div className="p-3 text-xs text-muted-foreground border-t border-border bg-muted/20">
-            <p className="mb-2 font-semibold">Format:</p>
-            <code className="block text-[10px] leading-relaxed">
-              - Node Text<br/>
-              &nbsp;&nbsp;children:<br/>
-              &nbsp;&nbsp;&nbsp;&nbsp;- Child Node<br/>
+            <p className="mb-2 font-semibold">Format (use 2 spaces for each level):</p>
+            <code className="block text-[10px] leading-relaxed whitespace-pre">
+- Root Node
+  - Child 1
+  - Child 2
+    - Grandchild
             </code>
           </div>
         </div>

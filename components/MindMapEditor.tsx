@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useEffect } from 'react'
 import ReactFlow, {
   Node,
   Edge,
@@ -92,6 +92,16 @@ export default function MindMapEditor({
 }: MindMapEditorProps) {
   const [nodes, setNodes, onNodesChange_internal] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange_internal] = useEdgesState(initialEdges)
+
+  // Sync when initialNodes or initialEdges change (e.g., from YAML editor)
+  useEffect(() => {
+    console.log('[v0] MindMapEditor received new nodes:', initialNodes.length, 'edges:', initialEdges.length)
+    if (initialNodes.length > 0) {
+      const layoutedNodes = calculateLayoutPositions(initialNodes, initialEdges)
+      setNodes(layoutedNodes)
+      setEdges(initialEdges)
+    }
+  }, [initialNodes.length, initialEdges.length])
 
   const onConnect = useCallback(
     (connection: Connection) => {
