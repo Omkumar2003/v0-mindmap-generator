@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, Loader, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Loader, RefreshCw, Save, Download } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import YAMLEditor from '@/components/YAMLEditor'
+import { exportMindMapAsImage } from '@/lib/mindmap-export'
 import type { Node, Edge } from 'reactflow'
 
 const MindMapEditor = dynamic(() => import('@/components/MindMapEditor'), {
@@ -39,11 +40,32 @@ export default function MindMapPage() {
   const [generating, setGenerating] = useState(false)
   const [saving, setSaving] = useState(false)
   const [yamlEditorOpen, setYamlEditorOpen] = useState(false)
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null)
   const supabase = createClient()
 
   useEffect(() => {
     fetchData()
   }, [docId])
+
+  // Auto-save nodes and edges every 5 seconds
+  useEffect(() => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current)
+    }
+
+    if (nodes.length > 0 && mindmap) {
+      autoSaveTimerRef.current = setTimeout(() => {
+        autoSaveMindMap()
+      }, 5000) // Auto-save every 5 seconds
+    }
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current)
+      }
+    }
+  }, [nodes, edges, mindmap])
 
   const fetchData = async () => {
     try {
@@ -160,6 +182,53 @@ export default function MindMapPage() {
     setEdges(newEdges)
   }
 
+  const handleExportAsImage = async () => {
+    try {
+      const element = document.querySelector('[role="presentation"]') as HTMLElement
+      if (!element) {
+        alert('Cannot find mindmap visualization. Please ensure the mindmap is loaded.')
+        return
+      }
+      
+      await exportMindMapAsImage('react-flow-container', document?.title || 'mindmap')
+      alert('Mind map exported successfully!')
+    } catch (error) {
+      console.error('[v0] Error exporting mindmap:', error)
+      alert(`Failed to export mindmap: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  const autoSaveMindMap = async () => {
+    if (!document || nodes.length === 0 || !mindmap) return
+
+    try {
+      setAutoSaveStatus('saving')
+      const { data: { user } } = await supabase.auth.getUser()
+
+      if (!user) return
+
+      const response = await fetch(`/api/mindmaps/${mindmap.id}/autosave`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nodes,
+          edges,
+          root_node: nodes,
+        }),
+      })
+
+      if (response.ok) {
+        console.log('[v0] Auto-saved mindmap successfully')
+        setAutoSaveStatus('saved')
+        // Reset to idle after 2 seconds
+        setTimeout(() => setAutoSaveStatus('idle'), 2000)
+      }
+    } catch (error) {
+      console.error('[v0] Error auto-saving mindmap:', error)
+      setAutoSaveStatus('idle')
+    }
+  }
+
   const handleSaveMindMap = async () => {
     if (!document || nodes.length === 0) {
       alert('No mind map to save. Generate one first!')
@@ -182,6 +251,7 @@ export default function MindMapPage() {
           .update({
             root_node: nodes,
             edges: edges,
+            nodes: nodes,
             updated_at: new Date().toISOString(),
           })
           .eq('id', mindmap.id)
@@ -199,6 +269,7 @@ export default function MindMapPage() {
             title: `${document.title} Mind Map`,
             root_node: nodes,
             edges: edges,
+            nodes: nodes,
           })
           .select()
           .single()
@@ -244,7 +315,21 @@ export default function MindMapPage() {
             </Button>
             <div>
               <h1 className="text-xl font-bold text-foreground">{document?.title}</h1>
-              <p className="text-xs text-muted-foreground">Mind Map View</p>
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-muted-foreground">Mind Map View</p>
+                {autoSaveStatus === 'saving' && (
+                  <span className="inline-flex items-center gap-1 text-xs text-yellow-600 dark:text-yellow-400">
+                    <Loader className="w-3 h-3 animate-spin" />
+                    Auto-saving...
+                  </span>
+                )}
+                {autoSaveStatus === 'saved' && (
+                  <span className="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                    <Save className="w-3 h-3" />
+                    Saved
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           <div className="flex gap-3">
@@ -257,6 +342,16 @@ export default function MindMapPage() {
               <RefreshCw className={`w-4 h-4 ${generating ? 'animate-spin' : ''}`} />
               {generating ? 'Generating...' : 'Generate with AI'}
             </Button>
+            {nodes.length > 0 && (
+              <Button
+                onClick={handleExportAsImage}
+                variant="outline"
+                className="gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Export Image
+              </Button>
+            )}
             <Button
               onClick={handleSaveMindMap}
               disabled={saving}
