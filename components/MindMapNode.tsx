@@ -18,8 +18,6 @@ interface MindMapNodeProps {
   }
   id: string
 }
-  id: string
-}
 
 export default function MindMapNode({ data, id }: MindMapNodeProps) {
   const [isEditing, setIsEditing] = useState(false)
