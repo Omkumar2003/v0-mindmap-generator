@@ -142,7 +142,21 @@ export default function MindMapPage() {
   }
 
   const handleYAMLChange = (newNodes: Node[], newEdges: Edge[]) => {
-    setNodes(newNodes)
+    console.log('[v0] handleYAMLChange called with nodes:', newNodes.length, 'edges:', newEdges.length)
+    
+    // Add handler callbacks to new nodes
+    const nodesWithHandlers = newNodes.map(node => ({
+      ...node,
+      data: {
+        ...node.data,
+        onChangeLabel: () => {},
+        onDelete: () => {},
+        onAddChild: () => {},
+        isEditable: true,
+      }
+    }))
+    
+    setNodes(nodesWithHandlers)
     setEdges(newEdges)
   }
 

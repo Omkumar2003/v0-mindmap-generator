@@ -15,18 +15,31 @@ interface YAMLEditorProps {
 
 // Convert mindmap nodes and edges to YAML format
 const nodesToYAML = (nodes: Node[], edges: Edge[]): string => {
-  const rootNode = nodes.find(n => n.id === 'root')
-  if (!rootNode) return ''
+  if (nodes.length === 0) return ''
 
+  // Build edge map for quick parent-child lookup
   const edgeMap = new Map<string, string[]>()
   edges.forEach(edge => {
-    if (!edgeMap.has(edge.source)) edgeMap.set(edge.source, [])
+    if (!edgeMap.has(edge.source)) {
+      edgeMap.set(edge.source, [])
+    }
     edgeMap.get(edge.source)?.push(edge.target)
   })
 
+  // Build node map for quick lookup
   const nodeMap = new Map<string, Node>()
   nodes.forEach(node => nodeMap.set(node.id, node))
 
+  // Find root node (prioritize 'root' id, otherwise use first node with no parent)
+  let rootNode = nodes.find(n => n.id === 'root')
+  if (!rootNode) {
+    const parentIds = new Set(edges.map(e => e.source))
+    rootNode = nodes.find(n => !parentIds.has(n.id)) || nodes[0]
+  }
+
+  if (!rootNode) return ''
+
+  // Recursively build YAML
   const buildYAML = (nodeId: string, indent: number = 0): string => {
     const node = nodeMap.get(nodeId)
     if (!node) return ''
@@ -34,18 +47,20 @@ const nodesToYAML = (nodes: Node[], edges: Edge[]): string => {
     const indentStr = '  '.repeat(indent)
     let yaml = `${indentStr}- ${node.data.label}`
 
+    // Add images if present
     if (node.data.images && node.data.images.length > 0) {
       yaml += `\n${indentStr}  images:`
-      node.data.images.forEach((img) => {
-        yaml += `\n${indentStr}    - ${img.substring(0, 50)}...`
+      node.data.images.forEach((img, idx) => {
+        const preview = img.substring(0, 30) + (img.length > 30 ? '...' : '')
+        yaml += `\n${indentStr}    - image_${idx + 1}: ${preview}`
       })
     }
 
+    // Add children recursively
     const children = edgeMap.get(nodeId) || []
     if (children.length > 0) {
-      yaml += `\n${indentStr}  children:`
       children.forEach(childId => {
-        const childYaml = buildYAML(childId, indent + 2)
+        const childYaml = buildYAML(childId, indent + 1)
         yaml += '\n' + childYaml
       })
     }
@@ -58,67 +73,75 @@ const nodesToYAML = (nodes: Node[], edges: Edge[]): string => {
 
 // Parse YAML format back to mindmap nodes and edges
 const yamlToNodes = (yaml: string, existingNodes: Node[], existingEdges: Edge[]): { nodes: Node[], edges: Edge[] } => {
-  const lines = yaml.split('\n').filter(line => line.trim())
+  const allLines = yaml.split('\n')
   const nodes: Node[] = []
   const edges: Edge[] = []
-  const nodeMap = new Map<string, string>()
-
   let nodeCounter = 0
-  const parseLines = (lineArray: string[], parentId: string | null = null, depth: number = 0) => {
-    let i = 0
-    while (i < lineArray.length) {
-      const line = lineArray[i]
-      const indent = line.search(/\S/)
-      const expectedIndent = depth * 2
+  const parentStack: Array<{ nodeId: string; indent: number }> = []
 
-      if (indent === -1) {
-        i++
-        continue
-      }
+  // Helper to get node handlers from existing nodes
+  const getNodeHandlers = () => ({
+    onChangeLabel: () => {},
+    onDelete: () => {},
+    onAddChild: () => {},
+  })
 
-      if (indent < expectedIndent) break
-      if (indent > expectedIndent) {
-        i++
-        continue
-      }
+  // Process each line
+  for (let i = 0; i < allLines.length; i++) {
+    const line = allLines[i]
+    const trimmed = line.trim()
 
-      const match = line.match(/^(\s*)-\s+(.+)$/)
-      if (match) {
-        const label = match[2].trim()
-        const nodeId = `node-${Date.now()}-${nodeCounter++}`
-        const position = existingNodes.find(n => n.data.label === label)?.position || { x: 0, y: 0 }
-
-        nodes.push({
-          id: nodeId,
-          type: 'mindmap',
-          data: {
-            label,
-            images: [],
-            onChangeLabel: () => {},
-            onDelete: () => {},
-            onAddChild: () => {},
-            isEditable: true,
-          },
-          position,
-        })
-
-        if (parentId) {
-          edges.push({
-            id: `edge-${parentId}-${nodeId}`,
-            source: parentId,
-            target: nodeId,
-          })
-        }
-
-        nodeMap.set(label, nodeId)
-      }
-
-      i++
+    // Skip empty lines, images, and children keywords
+    if (!trimmed || trimmed === 'images:' || trimmed === 'children:' || trimmed.startsWith('- ') === false) {
+      continue
     }
-  }
 
-  const relevantLines = lines.filter(line => !line.includes('images:') && !line.includes('children:'))
-  parseLines(relevantLines)
+    const indent = line.search(/\S/)
+    
+    // Extract label from line
+    const match = trimmed.match(/^-\s+(.+)$/)
+    if (!match) continue
+
+    let label = match[1].trim()
+    
+    // Remove image references from label
+    if (label.includes('images:')) {
+      label = label.split('images:')[0].trim()
+    }
+
+    // Generate node ID
+    const nodeId = `node-${Date.now()}-${nodeCounter++}`
+
+    // Create new node
+    const newNode: Node = {
+      id: nodeId,
+      type: 'mindmap',
+      data: {
+        label,
+        images: [],
+        isEditable: true,
+        ...getNodeHandlers(),
+      },
+      position: { x: 0, y: 0 },
+    }
+
+    // Find parent based on indentation
+    while (parentStack.length > 0 && parentStack[parentStack.length - 1].indent >= indent) {
+      parentStack.pop()
+    }
+
+    if (parentStack.length > 0) {
+      const parentId = parentStack[parentStack.length - 1].nodeId
+      edges.push({
+        id: `edge-${parentId}-${nodeId}`,
+        source: parentId,
+        target: nodeId,
+      })
+    }
+
+    nodes.push(newNode)
+    parentStack.push({ nodeId, indent })
+  }
 
   return { nodes, edges }
 }
@@ -139,12 +162,15 @@ export default function YAMLEditor({ nodes, edges, onYAMLChange, isOpen, onToggl
     try {
       const { nodes: newNodes, edges: newEdges } = yamlToNodes(yaml, nodes, edges)
       if (newNodes.length > 0) {
+        console.log('[v0] Applying YAML changes - new nodes:', newNodes.length, 'new edges:', newEdges.length)
         onYAMLChange(newNodes, newEdges)
         alert('Mind map updated from YAML!')
+      } else {
+        alert('No valid nodes found in YAML. Check the format.')
       }
     } catch (error) {
-      console.error('Error parsing YAML:', error)
-      alert('Error parsing YAML format')
+      console.error('[v0] Error parsing YAML:', error)
+      alert(`Error parsing YAML: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
